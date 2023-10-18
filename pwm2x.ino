@@ -14,11 +14,16 @@
 //   no actual input signal for each channel.   see FAILHOLD and FAILCENTRE in .h file
 
 // David/Buzz Sept 3rd 2012. 
+// Sep 29 2023 - andrush - Set channel 8 as RSSI indicator. Switched on FAILCENTRE mode. Chanell 8 set to min value in that mode. And max if connection is good.
+// Disabled inverting of channel 0
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 // PREPROCESSOR DIRECTIVES
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 #define CONFIGPIN 17    // Arduino pin 17 (PC3) to read config on startup (HI: serial 115k2,8n1; LO: sbus w/ inverted signal levels)
+
+#define USE_CONNECTION_STATUS_PIN
+#define IS_CONNECTED_PIN 16 // Pin A2. Connected - low level. Disconnected - high level.
 
 #define PPMVAL2SBUSVAL(t)  (uint16_t) (((t - 1000) * 0.85 ))
 
@@ -29,8 +34,9 @@
 
 uint8_t channelorder[ SERVO_CHANNELS] =
 {
-6, 0, 1, 7, 5, 4, 2, 3
+1, 0, 2, 3, 4, 5, 6, 7
 };
+//6, 0, 1, 7, 5, 4, 2, 3
 
 
 #define THROTTLE_CHANNEL		1 * 2	// Throttle Channel
@@ -112,6 +118,21 @@ void SBUS_Build_Packet(void)
 	{
 		uint16_t sbusval;
 		sbusval = PPMVAL2SBUSVAL(ppm_read(channelorder[SBUS_Current_Channel]));
+    // if(SBUS_Current_Channel == 0)
+    // {
+    //   sbusval = 2048 - sbusval;
+    // }
+    // if(SBUS_Current_Channel == 3)
+    // {
+    //    ThrottleHasFailSafe = (sbusval <= 900);
+    // }
+    #ifdef USE_CONNECTION_STATUS_PIN
+      if(SBUS_Current_Channel == 7)
+      {
+        int isConnected = !digitalRead(IS_CONNECTED_PIN);
+        sbusval = (isConnected ? 2048 : 0);
+      } 
+    #endif
 		for (SBUS_Current_Channel_Bit = 0; SBUS_Current_Channel_Bit < 11;
 				SBUS_Current_Channel_Bit++)
 		{
@@ -142,6 +163,7 @@ void SBUS_Build_Packet(void)
 void setup()
 {
 	DDRC &= ~_BV(PC3); // PC3 as INPUT
+  DDRC &= ~_BV(IS_CONNECTED_PIN); // PC2 (A2) as INPUT
 
 	// ------------------------------------------------------------------------------	
 	// Reset Source checkings
@@ -209,9 +231,18 @@ void loop()
 
 		if (serconfig)
 		{
+      uint16_t sbusval;
 			for (uint8_t i = 0; i < SERVO_CHANNELS; i++)
 			{
-				Serial.print(PPMVAL2SBUSVAL(ppm_read(channelorder[i])));
+        sbusval = PPMVAL2SBUSVAL(ppm_read(channelorder[i]));
+				Serial.print(sbusval);
+        Serial.print("(");
+        if(i == 0)
+        {
+          sbusval = 2048 - sbusval;
+        }
+        Serial.print(sbusval);
+        Serial.print(")");
 				//Serial.print(ppm_read(channelorder[i]));
 				Serial.print(" ");
 			}
